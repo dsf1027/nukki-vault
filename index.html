@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#14121f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="누끼 보관함">
+  <title>누끼 보관함</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+
+    <!-- 카메라 / 사진 화면 -->
+    <section id="camView" class="view">
+      <video id="video" playsinline muted autoplay></video>
+      <div id="photoBox" hidden><canvas id="photo"></canvas></div>
+
+      <div id="camMsg" hidden>
+        <p id="camMsgText">카메라를 사용할 수 없어요.</p>
+        <label class="btn">📷 카메라 앱으로 찍기<input id="fileCapture" type="file" accept="image/*" capture="environment" hidden></label>
+        <label class="btn ghost">🖼 사진 선택<input id="fileGallery" type="file" accept="image/*" hidden></label>
+      </div>
+
+      <p id="hint" class="hint"></p>
+
+      <div id="shutterRow">
+        <label id="galleryBtn" class="round" aria-label="앨범에서 선택">🖼<input id="fileGallery2" type="file" accept="image/*" hidden></label>
+        <button id="shutter" aria-label="사진 찍기"></button>
+        <span class="round spacer"></span>
+      </div>
+      <button id="retake" class="pill" hidden>↺ 다시 찍기</button>
+      <div id="flash"></div>
+    </section>
+
+    <!-- 보관함 화면 -->
+    <section id="vaultView" class="view" hidden>
+      <div id="vaultItems"></div>
+      <div id="floorLine"></div>
+      <p id="emptyMsg">아직 비어 있어요.<br>사진 속 물건을 1초 꾹 눌러 누끼를 따고<br>이 곳으로 끌어다 놓아 보세요.</p>
+    </section>
+
+    <div id="dragLayer"></div>
+    <div id="trash" hidden>🗑 여기에 놓으면 삭제</div>
+    <div id="ring" hidden><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="28"/></svg></div>
+    <div id="toast" role="status" aria-live="polite"></div>
+
+    <nav id="tabs">
+      <button id="tabCam" class="tab active">📷 <span>카메라</span></button>
+      <button id="tabVault" class="tab">🗃 <span>보관함</span><b id="badge" hidden>0</b></button>
+    </nav>
+  </div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+{
+  "name": "누끼 보관함",
+  "short_name": "누끼 보관함",
+  "description": "사진 속 물건을 꾹 눌러 누끼를 따고, 보관함에 떨어뜨려 모으는 앱",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14121f",
+  "theme_color": "#14121f",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
