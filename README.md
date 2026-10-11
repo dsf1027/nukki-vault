@@ -35,6 +35,22 @@ python3 -m http.server 8080     # http://localhost:8080
 
 배포 후 확인: `curl -sI https://<주소>/vendor/mediapipe/wasm/vision_wasm_internal.wasm | grep -i content-type` 가 `application/wasm`이어야 합니다.
 
+## Android APK (테스트 설치용)
+
+GitHub Actions(`.github/workflows/android.yml`)가 웹앱을 Capacitor로 감싸 **APK**를 만들고, 최신 빌드를 [Releases의 `android-latest`](../../releases/tag/android-latest)에 올립니다(실행은 Actions 탭의 "Android APK" → Run workflow로도 가능).
+
+폰에서 설치:
+1. 폰 브라우저로 위 Releases 페이지를 열어 `nukki-vault.apk`를 받습니다.
+2. 파일을 열면 "출처를 알 수 없는 앱 설치"를 허용하라는 안내가 나옵니다. 브라우저(또는 파일 앱)에 대해 허용한 뒤 설치합니다.
+3. 첫 실행에서 카메라 권한을 허용합니다. 첫 실행에는 인터넷이 필요합니다(AI 모델을 한 번 내려받음).
+
+알아둘 점:
+- **개인 테스트용 빌드**입니다. 공개 저장소에 올라 있는 고정 테스트 키(`tools/nukki-debug.keystore`)로 서명했습니다. 이 키는 누구나 볼 수 있으므로 플레이스토어 배포에는 쓰면 안 됩니다. 고정 키 덕분에 새 빌드가 이전 빌드 위에 그대로 설치(업데이트)되고 보관함 데이터가 유지됩니다.
+- 플레이스토어 출시에는 별도의 서명 키와 개발자 계정이 필요합니다.
+- iPhone용(IPA)은 Mac/Xcode와 Apple 개발자 계정이 필요해서 이 구성에 없습니다.
+- 이 앱의 Android 프로젝트는 매번 새로 생성하며 저장소에 포함하지 않습니다. 변경점은 `tools/android-patch.sh`(권한, 세로 고정, 아이콘, 서명)와 `android-res/`(아이콘 리소스)에 있습니다.
+- Capacitor 8.5.3 기준(Node 22, Java 21)입니다. 버전을 올릴 때는 `package.json`과 워크플로를 함께 확인하세요.
+
 ## 구조
 
 | 파일 | 역할 |
@@ -45,6 +61,7 @@ python3 -m http.server 8080     # http://localhost:8080
 | `physics.js` | 낙하·터치 판정·크기 계산 (DOM 없는 순수 함수) |
 | `store.js` | IndexedDB 저장 |
 | `sw.js`, `manifest.webmanifest` | 설치·오프라인 |
+| `capacitor.config.json`, `tools/`, `android-res/` | Android APK 빌드 설정 |
 | `vendor/` | MediaPipe 번들·wasm (`vendor/README.md` 참고). **AI 모델은 번들하지 않고** 첫 실행 때 Google 서버에서 받아 캐시합니다. |
 
 누끼 방식: 누른 지점을 키포인트로 AI 모델(`magic_touch`)에 넘겨 그 물체의 마스크를 얻고, 마스크 영역만 잘라 PNG로 저장합니다. 모델을 못 불러오는 기기(WASM SIMD 미지원 등)에서는 테두리 색을 배경으로 보고 빼는 **간이 모드**로 자동 전환됩니다. 간이 모드는 책상 위 물건처럼 배경이 단순할 때만 쓸 만합니다.
