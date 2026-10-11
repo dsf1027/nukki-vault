@@ -2,6 +2,7 @@
 import assert from "node:assert";
 import * as P from "../physics.js";
 import { fallbackSegment } from "../segment.js";
+import { refineMask, keepMainObject, fillSmallHoles, erode, dilate, components } from "../refine.js";
 
 /* ---- falling ---- */
 {
@@ -91,6 +92,97 @@ import { fallbackSegment } from "../segment.js";
   // A uniform image has no object at all.
   const flat = new Uint8ClampedArray(w * h * 4).fill(180);
   assert.strictEqual(fallbackSegment({ data: flat, width: w, height: h }, 0.5, 0.5), null);
+}
+
+
+/* ---- mask refinement ---- */
+{
+  const rect = (m, w, x0, y0, x1, y1, v = 1) => { for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) m[y * w + x] = v; };
+  const sum = (m) => m.reduce((a, v) => a + v, 0);
+  const W = 300, H = 200;
+
+  // distant stray blob is dropped, a fragment right next to the object is kept
+  {
+    const m = new Uint8Array(W * H);
+    rect(m, W, 100, 60, 200, 140); // main object
+    rect(m, W, 203, 70, 223, 90); // 3px gap (reach here is ~1.2% of the long side = 4px): part of the object, e.g. a tail tip
+    rect(m, W, 207, 100, 227, 120); // 7px gap: too far, treated as a separate thing
+    rect(m, W, 10, 170, 60, 190); // far away strip
+    const k = keepMainObject(m, W, H);
+    assert.strictEqual(k[75 * W + 210], 1, "near fragment kept");
+    assert.strictEqual(k[110 * W + 215], 0, "fragment beyond the reach removed");
+    assert.strictEqual(k[180 * W + 30], 0, "far stray removed");
+    assert.strictEqual(k[100 * W + 150], 1, "main kept");
+    // specks are noise
+    const s = new Uint8Array(W * H);
+    rect(s, W, 100, 60, 200, 140);
+    rect(s, W, 210, 70, 212, 72);
+    assert.strictEqual(sum(keepMainObject(s, W, H)), 100 * 80, "tiny speck removed");
+  }
+
+  // small holes are filled, big openings stay open, and a hole open to the outside is not a hole
+  {
+    const m = new Uint8Array(W * H);
+    rect(m, W, 50, 30, 250, 170);
+    rect(m, W, 100, 80, 104, 84, 0); // 4x4 hole
+    rect(m, W, 160, 60, 220, 140, 0); // big opening
+    const f = fillSmallHoles(m, W, H);
+    assert.strictEqual(f[82 * W + 102], 1, "small hole filled");
+    assert.strictEqual(f[100 * W + 190], 0, "large opening stays");
+    const c = new Uint8Array(W * H);
+    rect(c, W, 50, 30, 250, 170);
+    rect(c, W, 140, 30, 144, 60, 0); // notch connected to the background
+    assert.strictEqual(fillSmallHoles(c, W, H)[40 * W + 142], 0, "notch is not a hole");
+  }
+
+  // erode/dilate basics, and the frame edge is not eaten
+  {
+    const m = new Uint8Array(W * H);
+    rect(m, W, 0, 0, 100, 100);
+    const e = erode(m, W, H, 2);
+    assert.strictEqual(e[50 * W + 50], 1);
+    assert.strictEqual(e[50 * W + 99], 0, "inner edge eroded");
+    assert.strictEqual(e[50 * W + 0], 1, "image border not eroded");
+    assert.strictEqual(sum(dilate(e, W, H, 2)) >= sum(e), true);
+    assert.strictEqual(components(m, W, H, 1).sizes.length, 2);
+  }
+
+  // refineMask: soft edge, shrinks the rim, keeps the interior opaque, same size
+  {
+    const m = new Uint8Array(600 * 400);
+    rect(m, 600, 200, 100, 400, 300);
+    rect(m, 600, 20, 350, 80, 390); // stray
+    const a = refineMask(m, 600, 400);
+    assert.strictEqual(a.length, m.length);
+    assert.strictEqual(a[200 * 600 + 300], 255, "interior fully opaque");
+    assert.strictEqual(a[370 * 600 + 50], 0, "stray gone");
+    assert.strictEqual(a[200 * 600 + 150], 0, "outside transparent");
+    const edge = [];
+    for (let x = 196; x < 206; x++) edge.push(a[200 * 600 + x]);
+    assert.ok(edge.some((v) => v > 0 && v < 255), "edge is feathered: " + edge.join(","));
+    assert.ok(a[200 * 600 + 200] < 128, "the original outermost pixel is mostly transparent now (" + a[200 * 600 + 200] + ")");
+    assert.strictEqual(a[200 * 600 + 204], 255, "a few px inside is solid again");
+  }
+
+  // tiny images are not shaved at all
+  {
+    const m = new Uint8Array(200 * 120);
+    rect(m, 200, 60, 30, 140, 90);
+    const a = refineMask(m, 200, 120);
+    let on = 0;
+    for (let i = 0; i < a.length; i++) if (a[i] >= 128) on++;
+    assert.ok(on >= 80 * 60 * 0.97, "small image keeps its object (" + on + " of 4800 px)");
+  }
+
+  // a thin object must survive the rim shaving
+  {
+    const m = new Uint8Array(600 * 400);
+    rect(m, 600, 100, 200, 500, 203); // 3px line
+    const a = refineMask(m, 600, 400);
+    let on = 0;
+    for (let i = 0; i < a.length; i++) if (a[i] >= 128) on++;
+    assert.ok(on > 400 * 1, "thin object not erased (" + on + " px left)");
+  }
 }
 
 console.log("all tests passed");

@@ -11,6 +11,7 @@ export class Segmenter {
     this.seg = null;
     this.failed = false;
     this._init = null;
+    this._mp = null;
   }
 
   // Lazy and idempotent. Resolves to true when the model is usable.
@@ -28,13 +29,15 @@ export class Segmenter {
     return this._init;
   }
 
-  async _load() {
-    const { FilesetResolver, InteractiveSegmenter } = await import(MP_BASE + "vision_bundle.mjs");
-    const fileset = await FilesetResolver.forVisionTasks(MP_BASE + "wasm");
+  async _load(delegates = ["GPU", "CPU"]) {
+    if (!this._mp) {
+      const { FilesetResolver, InteractiveSegmenter } = await import(MP_BASE + "vision_bundle.mjs");
+      this._mp = { InteractiveSegmenter, fileset: await FilesetResolver.forVisionTasks(MP_BASE + "wasm") };
+    }
     let lastErr;
-    for (const delegate of ["GPU", "CPU"]) {
+    for (const delegate of delegates) {
       try {
-        this.seg = await InteractiveSegmenter.createFromOptions(fileset, {
+        this.seg = await this._mp.InteractiveSegmenter.createFromOptions(this._mp.fileset, {
           baseOptions: { modelAssetPath: MODEL_URL, delegate },
           outputCategoryMask: true,
           outputConfidenceMasks: false,
@@ -48,11 +51,24 @@ export class Segmenter {
     throw lastErr;
   }
 
+  async _useCpu() {
+    try { this.seg.close(); } catch (e) { /* already gone */ }
+    this.seg = null;
+    await this._load(["CPU"]);
+  }
+
   // Returns { mask: Uint8Array(w*h) of 0/1, w, h, engine } or null.
   async segmentAt(canvas, nx, ny) {
     if (await this.init()) {
       try {
-        const out = this._run(canvas, nx, ny);
+        let out = this._run(canvas, nx, ny);
+        // Known GPU-delegate failure: after other photo sizes it can label every pixel the
+        // same, i.e. "the whole photo is the object". The CPU delegate gives the right mask.
+        if (out && out.uniform && this.delegate === "GPU") {
+          console.warn("GPU segmentation returned a uniform mask; switching to the CPU delegate");
+          await this._useCpu();
+          out = this._run(canvas, nx, ny);
+        }
         if (out) return out;
       } catch (e) {
         console.warn("segment failed, using fallback:", e);
@@ -73,8 +89,12 @@ export class Segmenter {
       const py = Math.min(m.height - 1, Math.round(ny * (m.height - 1)));
       const label = src[py * m.width + px];
       const mask = new Uint8Array(src.length);
-      for (let i = 0; i < src.length; i++) mask[i] = src[i] === label ? 1 : 0;
-      out = { mask, w: m.width, h: m.height, engine: "mediapipe" };
+      let uniform = true;
+      for (let i = 0; i < src.length; i++) {
+        mask[i] = src[i] === label ? 1 : 0;
+        if (!mask[i]) uniform = false;
+      }
+      out = { mask, w: m.width, h: m.height, engine: "mediapipe", uniform };
     });
     return out;
   }
@@ -236,11 +256,17 @@ function fallbackFromCanvas(canvas, nx, ny) {
 
 // Cuts `mask` (w*h of 0/1, any resolution) out of `src` and crops to its
 // bounding box. Returns { canvas, box } with box in src pixels, or null.
+// `mask` is either 0/1 or a 0..255 alpha plane (see refine.js); any size w*h.
 export function buildCutout(src, mask, mw, mh, maxSide = 640) {
+  let max = 0;
+  for (let i = 0; i < mask.length; i++) if (mask[i] > max) max = mask[i];
+  const gain = max <= 1 ? 255 : 1;
+  const solid = max <= 1 ? 1 : 128; // what counts as "inside" for the bounding box
+
   let x0 = mw, y0 = mh, x1 = -1, y1 = -1, area = 0;
   for (let y = 0; y < mh; y++)
     for (let x = 0; x < mw; x++) {
-      if (!mask[y * mw + x]) continue;
+      if (mask[y * mw + x] < solid) continue;
       area++;
       if (x < x0) x0 = x;
       if (x > x1) x1 = x;
@@ -271,7 +297,7 @@ export function buildCutout(src, mask, mw, mh, maxSide = 640) {
   for (let p = 0; p < mask.length; p++) {
     const i = p * 4;
     img.data[i] = img.data[i + 1] = img.data[i + 2] = 255;
-    img.data[i + 3] = mask[p] ? 255 : 0;
+    img.data[i + 3] = Math.min(255, mask[p] * gain);
   }
   mctx.putImageData(img, 0, 0);
   ctx.globalCompositeOperation = "destination-in";

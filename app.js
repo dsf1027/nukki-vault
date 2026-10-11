@@ -1,4 +1,5 @@
 import { Segmenter, buildCutout } from "./segment.js";
+import { refineMask } from "./refine.js";
 import * as P from "./physics.js";
 import * as store from "./store.js";
 
@@ -271,7 +272,7 @@ async function fireLongPress() {
     const nx = (x - photoRect.x) / photoRect.w;
     const ny = (y - photoRect.y) / photoRect.h;
     const r = await seg.segmentAt(el.photo, nx, ny);
-    const cut = r && buildCutout(el.photo, r.mask, r.w, r.h);
+    const cut = r && buildCutout(el.photo, refineMask(r.mask, r.w, r.h), r.w, r.h);
     if (!cut) { toast("물건을 찾지 못했어요. 다른 곳을 눌러 보세요"); return; }
     if (r.engine === "fallback") toast("간이 모드로 분리했어요 (단순한 배경에서 가장 잘 돼요)", 3200);
 
