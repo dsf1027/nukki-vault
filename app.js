@@ -411,6 +411,14 @@ async function dropIntoVault(it) {
   it.el.style.zIndex = it.z;
   items.push(it);
   updateBadge();
+  // Let it visibly fall in: from above the screen if it was let go near the floor.
+  const y0 = P.dropStartY(it.y, P.restTop(floorY(), it.h, it.floorOff), it.h);
+  if (y0 !== it.y) {
+    it.y = y0;
+    applyPos(it);
+    it.el.classList.add("pop");
+    setTimeout(() => it.el.classList.remove("pop"), 350);
+  }
   startFall(it);
   try {
     await persist(it);

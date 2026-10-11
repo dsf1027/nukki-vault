@@ -42,6 +42,11 @@ import { fallbackSegment } from "../segment.js";
   assert.strictEqual(f.w / f.h, 2);
   const small = P.vaultFit(50, 40, 400, 800);
   assert.strictEqual(small.k, 1, "small items are never enlarged");
+  // Drop-in: released near the floor -> re-enter from above the screen; high up -> stay.
+  assert.strictEqual(P.dropStartY(700, 710, 120), -120, "near the floor: from above the screen");
+  assert.strictEqual(P.dropStartY(300, 710, 120), 300, "high enough: falls from where it was let go");
+  assert.strictEqual(P.dropStartY(560, 710, 120), -120, "150px of fall is too little to see");
+  assert.strictEqual(P.dropStartY(0, 100, 80), -80, "tiny vault: always from the top");
   assert.strictEqual(P.clampCenterX(-1), 0.05);
   assert.strictEqual(P.clampCenterX(2), 0.95);
   assert.ok(P.inRect(P.inflate({ left: 10, top: 10, right: 20, bottom: 20 }, 5), 6, 24));

@@ -17,6 +17,13 @@ export function restTop(floorY, h, floorOff) {
   return Math.max(0, floorY - floorOff - h);
 }
 
+// Where a newly stored item starts falling from. Released close to the floor there
+// would be nothing to see, so it re-enters from just above the screen instead.
+export function dropStartY(y, restY, h) {
+  const minFall = Math.max(160, restY * 0.35);
+  return restY - y >= minFall ? y : -h;
+}
+
 export function itemSize(nw, nh, wFrac, viewW) {
   const w = wFrac * viewW;
   return { w, h: (w * nh) / nw };

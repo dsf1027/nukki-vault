@@ -173,6 +173,28 @@ async function waitFor(page, fn, arg, timeout = 60000) {
   await waitFor(page, () => window.__nukki.items.length === 1);
   ok(true, "deletion is persisted");
 
+  /* 9. released right on the tab: the item must fall in from above the screen */
+  await page.click("#tabCam");
+  await waitFor(page, () => document.getElementById("video").videoWidth > 0);
+  await page.setInputFiles("#fileGallery2", CAT);
+  await waitFor(page, () => !document.getElementById("photoBox").hidden);
+  await page.mouse.move(catAt.x, catAt.y);
+  await page.mouse.down();
+  await waitFor(page, () => window.__nukki.sticker !== null);
+  await page.mouse.move(tx, ty, { steps: 15 });
+  await sleep(600);
+  await page.mouse.up(); // let go on the tab bar, i.e. at the floor
+  await sleep(60);
+  const early = await page.evaluate(() => { const i = window.__nukki.items[window.__nukki.items.length - 1]; return { y: i.y, h: i.h }; });
+  ok(early.y < 0, `released at the floor, it re-enters from above the screen (y=${Math.round(early.y)})`);
+  await sleep(230);
+  await shot(page, "8a-mid-air");
+  await waitFor(page, () => { const i = window.__nukki.items[window.__nukki.items.length - 1]; return i.vy === 0 && i.y > 100; }, null, 10000);
+  await sleep(300);
+  const landed = await page.evaluate(() => { const i = window.__nukki.items[window.__nukki.items.length - 1]; return { y: i.y, h: i.h, off: i.floorOff }; });
+  ok(Math.abs(landed.y + landed.h + landed.off - floor) < 1.5, "and lands on the floor");
+  await shot(page, "8-dropped-in");
+
   ok(errors.length === 0, "no page errors " + JSON.stringify(errors));
   await browser.close();
   console.log(failed ? `${failed} FAILED` : "all e2e checks passed");
