@@ -1,6 +1,6 @@
 // Offline support. The app shell is network-first (so updates show up),
 // the large wasm/model files are cache-first (fetched once, then offline).
-const CACHE = "nukki-vault-v2";
+const CACHE = "nukki-vault-v3";
 const SHELL = [
   "./", "index.html", "style.css", "app.js", "segment.js", "refine.js", "physics.js", "store.js",
   "manifest.webmanifest", "icons/icon.svg", "icons/icon-192.png", "icons/icon-512.png", "icons/icon-180.png",

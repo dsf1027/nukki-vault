@@ -57,7 +57,8 @@ html, body {
   width: 48px; height: 48px; border-radius: 50%; background: rgba(20,18,31,.6); display: grid;
   place-items: center; font-size: 22px; cursor: pointer;
 }
-.round.spacer { visibility: hidden; }
+.round { border: 0; color: inherit; font: inherit; font-size: 22px; padding: 0; }
+#video.mirror { transform: scaleX(-1); }
 .pill {
   position: absolute; left: 50%; transform: translateX(-50%);
   bottom: calc(var(--bar-h) + var(--safe-b) + 24px); padding: 12px 22px; border-radius: 999px; border: 0;
@@ -128,3 +129,6 @@ html, body {
   opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; max-width: 88%; text-align: center;
 }
 #toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+#photoBox canvas { transition: filter .2s; }
+#photoBox.dim canvas { filter: brightness(.55) saturate(.7); }

@@ -23,7 +23,9 @@ let camMode = "live"; // "live" | "photo"
 let stream = null;
 let camToken = 0;
 let photoRect = { x: 0, y: 0, w: 1, h: 1 };
-let sticker = null; // freshly cut-out item, not yet in the vault
+const stickers = []; // freshly cut-out items (several people can be cut from one photo), not yet in the vault
+let facing = "environment"; // which camera: "environment" (back) | "user" (front)
+try { if (localStorage.getItem("nukki:facing") === "user") facing = "user"; } catch { /* no storage */ }
 let busy = false; // a cut-out is being computed
 const items = []; // vault items
 const falling = new Set();
@@ -96,7 +98,7 @@ function setView(v) {
   el.vaultView.hidden = v !== "vault";
   el.tabCam.classList.toggle("active", v === "cam");
   el.tabVault.classList.toggle("active", v === "vault");
-  if (sticker && !(drag && drag.it === sticker)) sticker.el.hidden = v !== "cam";
+  for (const st of stickers) if (!(drag && drag.it === st)) st.el.hidden = v !== "cam";
   if (v === "vault") {
     stopStream();
     layoutVault();
@@ -109,9 +111,10 @@ function setView(v) {
 }
 
 function updateHint() {
+  el.photoBox.classList.toggle("dim", stickers.length > 0); // the photo darkens once something is cut out, so the cut-outs stand out
   if (view !== "cam") { el.hint.textContent = ""; return; }
   if (camMode === "live") el.hint.textContent = "물건을 비추고 셔터를 누르세요";
-  else if (sticker) el.hint.textContent = "스티커를 아래 '보관함' 탭으로 끌어다 놓으세요";
+  else if (stickers.length) el.hint.textContent = "스티커를 '보관함' 탭으로 끌어다 놓으세요 · 다른 것도 꾹 눌러 추가";
   else el.hint.textContent = "물건을 1초 꾹 누르면 누끼를 따요";
 }
 
@@ -144,11 +147,12 @@ async function startCamera() {
   el.video.hidden = false;
   try {
     const s = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { ideal: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      video: { facingMode: { ideal: facing }, width: { ideal: 1920 }, height: { ideal: 1080 } },
       audio: false,
     });
     if (token !== camToken || view !== "cam" || camMode !== "live") { s.getTracks().forEach((t) => t.stop()); return; }
     stream = s;
+    el.video.classList.toggle("mirror", facing === "user");
     el.video.srcObject = s;
     await el.video.play().catch(() => {});
     el.camMsg.hidden = true;
@@ -161,6 +165,13 @@ async function startCamera() {
     el.camMsg.hidden = false;
     el.shutterRow.hidden = true;
   }
+}
+
+function flipCamera() {
+  facing = facing === "user" ? "environment" : "user";
+  try { localStorage.setItem("nukki:facing", facing); } catch { /* no storage */ }
+  stopStream();
+  startCamera();
 }
 
 function stopStream() {
@@ -195,17 +206,20 @@ function showPhoto() {
   seg.init(); // start loading the model while the user looks at the photo
 }
 
-function drawToPhoto(source, sw, sh) {
+function drawToPhoto(source, sw, sh, mirror = false) {
   const k = Math.min(1, PHOTO_MAX / Math.max(sw, sh));
   el.photo.width = Math.round(sw * k);
   el.photo.height = Math.round(sh * k);
-  el.photo.getContext("2d").drawImage(source, 0, 0, el.photo.width, el.photo.height);
+  const ctx = el.photo.getContext("2d");
+  if (mirror) { ctx.translate(el.photo.width, 0); ctx.scale(-1, 1); } // the front camera is shown mirrored, so keep the photo as it was seen
+  ctx.drawImage(source, 0, 0, el.photo.width, el.photo.height);
+  if (mirror) ctx.setTransform(1, 0, 0, 1, 0, 0);
 }
 
 function capture() {
   const v = el.video;
   if (!v.videoWidth) return;
-  drawToPhoto(v, v.videoWidth, v.videoHeight);
+  drawToPhoto(v, v.videoWidth, v.videoHeight, facing === "user");
   el.flash.classList.remove("on");
   void el.flash.offsetWidth;
   el.flash.classList.add("on");
@@ -234,10 +248,10 @@ function retake() {
 }
 
 function clearSticker() {
-  if (!sticker) return;
-  sticker.el.remove();
-  URL.revokeObjectURL(sticker.url);
-  sticker = null;
+  for (const st of stickers.splice(0)) {
+    st.el.remove();
+    URL.revokeObjectURL(st.url);
+  }
 }
 
 /* ---------- long press → cut-out ---------- */
@@ -276,7 +290,6 @@ async function fireLongPress() {
     if (!cut) { toast("물건을 찾지 못했어요. 다른 곳을 눌러 보세요"); return; }
     if (r.engine === "fallback") toast("간이 모드로 분리했어요 (단순한 배경에서 가장 잘 돼요)", 3200);
 
-    clearSticker();
     const blob = await canvasToBlob(cut.canvas);
     const it = await makeItem(blob, cut.canvas.width, cut.canvas.height);
     const s = photoRect.w / el.photo.width;
@@ -287,10 +300,11 @@ async function fireLongPress() {
     it.stored = false;
     applySize(it);
     applyPos(it);
-    it.el.style.zIndex = 5;
+    it.z = 5 + stickers.length; // later cut-outs sit on top, so each one can be grabbed
+    it.el.style.zIndex = it.z;
     it.el.classList.add("pop");
     el.dragLayer.appendChild(it.el);
-    sticker = it;
+    stickers.push(it);
     updateHint();
     // Finger still down: keep dragging straight away, like lifting an app icon.
     if (pointer.down && pointer.id === pid) startDrag(it, "cam", pointer.x, pointer.y, pid);
@@ -402,7 +416,8 @@ async function endDrag() {
 }
 
 async function dropIntoVault(it) {
-  sticker = null;
+  const si = stickers.indexOf(it);
+  if (si >= 0) stickers.splice(si, 1);
   it.stored = true;
   el.vaultItems.appendChild(it.el);
   it.wFrac = Math.min(0.7, it.w / W());
@@ -483,8 +498,9 @@ function onDown(e) {
     return;
   }
   if (camMode !== "photo" || busy) return;
-  if (sticker && P.pickTop([sticker], e.clientX, e.clientY, alphaAt)) {
-    startDrag(sticker, "cam", e.clientX, e.clientY, e.pointerId);
+  const grabbed = P.pickTop(stickers, e.clientX, e.clientY, alphaAt);
+  if (grabbed) {
+    startDrag(grabbed, "cam", e.clientX, e.clientY, e.pointerId);
     return;
   }
   if (P.inRect({ left: photoRect.x, top: photoRect.y, right: photoRect.x + photoRect.w, bottom: photoRect.y + photoRect.h }, e.clientX, e.clientY)) {
@@ -536,6 +552,7 @@ document.addEventListener("visibilitychange", () => {
 });
 
 el.shutter.addEventListener("click", capture);
+$("flipBtn").addEventListener("click", flipCamera);
 el.retake.addEventListener("click", retake);
 el.tabCam.addEventListener("click", () => { if (view !== "cam") setView("cam"); });
 el.tabVault.addEventListener("click", () => { if (view !== "vault") setView("vault"); });
@@ -546,7 +563,7 @@ for (const id of ["fileCapture", "fileGallery", "fileGallery2"]) {
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 
 // Hooks for automated tests.
-window.__nukki = { items, get sticker() { return sticker; }, get view() { return view; }, seg };
+window.__nukki = { items, stickers, get sticker() { return stickers[stickers.length - 1] || null; }, get view() { return view; }, seg };
 
 await loadVault();
 updateHint();
